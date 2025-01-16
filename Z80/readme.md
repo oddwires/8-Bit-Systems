@@ -13,3 +13,5 @@ Sad to say, I've only recently got the block of DRAM to work properly.
 ![screenshot](Images/IMG_1727.JPG)
 
 ![screenshot](Images/IMG_1728.JPG)
+
+![screenshot](Images/Z80_IO_Control_Logic.png)
