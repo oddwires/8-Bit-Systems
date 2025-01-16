@@ -11,3 +11,9 @@ I started this project back in 1980's when the Z80 was cutting edge.
 
 ![Hardware](https://github.com/oddwires/8-Bit-Systems/blob/master/Z80/Images/IMG_1728.JPG)
 
+**Two independanty controled, phase locked, DMA channels...**
+
+![Hardware](https://github.com/oddwires/RP2040/blob/master/Function%20Generator/Images/Capture.JPG)
+
+![screenshot](Images/IMG_1727.JPG)
+
