@@ -1,5 +1,5 @@
 I started this project back in 1980's when the Z80 was cutting edge.  
-Sad to say, I've only recently got the block of DRAM to work properly.
+Sad to say, I've only recently got the block of DRAM to work properly. 
 
 * Z80 @ 2MHz - will work at 4MHz, but running at 2MHz allows for direct connection to slower EEPROM devices.
 * 64K DRAM - organised as 2 x 32K pages.
