@@ -9,6 +9,13 @@
 ;       12-Mar-01 JLH V3.0: improve text about paging, formerly called "mapping"
 ;       27-Mar-02 JLH Replace bad equates FN_READ_REG and FN_WRITE_REG
 ;       11-Jan-05 JLH Correct (commented out) bug in Z180 reset/illegal op-code trap
+;	09-Jul-25 TP  1) Various format changes to work with Telemark Assembler (TASM) Ver 3.2
+;		      2) Replaced GETCHAR and PUTCHAR routines to work with 6850 UART
+;		      3) Modified RESET routine to inintialise target hardware at startup
+;		      4) Modified Memory Map to match target hardware
+;		      5) Paged memory support HAS NOT been implemented
+;  		  The registered distribution disk for the  Telemark Assembler (TASM) Ver 3.2
+;		  can be found at https://github.com/spotco/TI-asm/tree/master/tasm
 ;
 ;============================================================================
 ;
@@ -43,24 +50,28 @@
 ;============================================================================
 ;
 ;  Hardware definitions
-        .equ    ROM_START, H'0000          ;START OF MONITOR CODE
-        .equ    RAM_START, H'FC00          ;START OF MONITOR RAM
-        .equ    USER_CODE, H'8000          ;START OF USER'S INTS/CODE
+ROM_START   	.equ	00000h				; Start of monitor code
+RAM_START		.equ	01f4eh				; Start of monitor ram
+USER_CODE		.equ	08000h				; Start of user's ints/code
 ;
-;  Equates for I/O mapped 8250 or 16450 serial port
-        .equ    S16450,  H'80              ;base of 16450 UART
-        .equ    RXR,     0                 ;  Receiver buffer register
-        .equ    TXR,     0                 ;  Transmitter buffer register
-        .equ    IER,     1                 ;  Interrupt enable register
-        .equ    LCR,     3                 ;  Line control register
-        .equ    MCR,     4                 ;  Modem control register
-        .equ    LSR,     5                 ;  Line status register
+; Equates for I/O mapped 6850 serial port and DRAM page control register...
+COM0_CR			.equ	070h                ; Note: Hardcoded to use COM0
+COM0_DR			.equ	071h
+COM1_CR			.equ	072h				; Com1 is initialised at startup, but not used.
+COM1_DR			.equ	073h
+DRAM_CR     	.equ    0ffh                ; 00h = Page 0, 01h = Page 1
 ;
 ;  Define monitor serial port
-        .equ    SERIAL_STATUS,   S16450+LSR
-        .equ    SERIAL_DATA,     S16450+RXR
-        .equ    RXRDY,           0         ; BIT NUMBER (NOT MASK) FOR RX BUFFER FULL
-        .equ    TXRDY,           5         ; BIT NUMBER (NOT MASK) FOR TX BUFFER EMPTY
+RXRDY			.equ	00h			        ; Bit number (not mask) for RX Buffer full
+TXRDY			.equ	01h			        ; Bit number (not mask) for tx buffer empty
+;
+; define other hardware I/O ports...
+D_PORT0			.equ	000h
+D_PORT1			.equ	001h
+D_PORT2			.equ	002h
+D_PORT3			.equ	003h
+CON_REG			.equ	004h
+PAGELATCH		.equ	0ffh				; 00h = Page 0, 01h = Page 1
 ;
 ;============================================================================
 ;  RAM definitions:  top 1K (or less)
@@ -68,38 +79,38 @@
 ;
 ;  Initial user stack
 ;  (Size and location is user option)
-        .RS     64
+				.block  64
 INITSTACK:
 ;
 ;  Monitor stack
 ;  (Calculated use is at most 6 bytes.  Leave plenty of spare)
-        .RS     16
+				.block  16
 MONSTACK:
 ;
 ;  Target registers:  order must match that in TRGZ80.C
 TASK_REGS:
- REG_STATE:     .RS     1
- REG_PAGE:      .RS     1
- REG_SP:        .RS     2
- REG_IX:        .RS     2
- REG_IY:        .RS     2
- REG_HL:        .RS     2
- REG_BC:        .RS     2
- REG_DE:        .RS     2
- REG_AF:                        ;LABEL ON FLAGS, A AS A WORD
- REG_FLAGS:     .RS     1
- REG_A:         .RS     1
- REG_PC:        .RS     2
- REG_I:         .RS     1
- REG_IFF:       .RS     1
+REG_STATE:  	.block  1
+REG_PAGE:		.block  1
+REG_SP:			.block  2
+REG_IX:			.block  2
+REG_IY:			.block  2
+REG_HL:			.block  2
+REG_BC:			.block  2
+REG_DE:			.block  2
+REG_AF:										; Label on FLAGS, A as a WORD
+REG_FLAGS:		.block  1
+REG_A:			.block  1
+REG_PC:			.block  2
+REG_I:			.block  1
+REG_IFF:		.block  1
  ;
- REG_HLX:       .RS     2       ;ALTERNATE REGISTER SET
- REG_BCX:       .RS     2
- REG_DEX:       .RS     2
- REG_AFX:                       ;LABEL ON FLAGS, A AS A WORD
- REG_FLGX:      .RS     1
- REG_AX:        .RS     1
-        .equ    T_REGS_SIZE, *-TASK_REGS
+REG_HLX:		.block  2					; Alternate register set
+REG_BCX:		.block  2
+REG_DEX:		.block  2
+REG_AFX:									; Label on FLAGS, A as a WORD
+REG_FLGX:		.block  1
+REG_AX:			.block  1
+T_REGS_SIZE		.equ    $-TASK_REGS
 ; !!! Caution:  don't put parenthesis around the above in ASM180:
 ; !!! The parenthesis in (*-TASK_REGS) are "remembered", such that
 ; !!! LD BC,T_REGS_SIZE is the same as LD BC,(T_REGS_SIZE)
@@ -109,10 +120,10 @@ TASK_REGS:
 ;  Communications buffer
 ;  (Must be at least as long as TASK_REG_SIZE.  Larger values may improve
 ;  speed of NoICE memory load and dump commands)
-        .equ    COMBUF_SIZE, 67              ;DATA SIZE FOR COMM BUFFER
-COMBUF:         .RS      2+COMBUF_SIZE+1 ;BUFFER ALSO HAS FN, LEN, AND CHECK
+COMBUF_SIZE     .equ    67				    ; Data size for COMM buffer
+COMBUF:			.block  2+COMBUF_SIZE+1		; Buffer also has fn, len, and check
 ;
-        .equ    RAM_END, *               ;ADDRESS OF TOP+1 OF RAM
+RAM_END         .equ	$		            ; Address of top+1 of ram
 ;
 ;===========================================================================
 ;  8080 mode Interrupt vectors
@@ -138,7 +149,7 @@ R0:     di
         nop
 ;
 ;  Interrupt RST 10
-        jp      USER_CODE + H'10
+        jp      USER_CODE + 010h
         nop
         nop
         nop
@@ -146,7 +157,7 @@ R0:     di
         nop
 ;
 ;  Interrupt RST 18
-        jp      USER_CODE + H'18
+        jp      USER_CODE + 018h
         nop
         nop
         nop
@@ -154,7 +165,7 @@ R0:     di
         nop
 ;
 ;  Interrupt RST 20
-        jp      USER_CODE + H'20
+        jp      USER_CODE + 020h
         nop
         nop
         nop
@@ -162,7 +173,7 @@ R0:     di
         nop
 ;
 ;  Interrupt RST 28
-        jp      USER_CODE + H'28
+        jp      USER_CODE + 028h
         nop
         nop
         nop
@@ -170,7 +181,7 @@ R0:     di
         nop
 ;
 ;  Interrupt RST 30
-        jp      USER_CODE + H'30
+        jp      USER_CODE + 030h
         nop
         nop
         nop
@@ -178,7 +189,7 @@ R0:     di
         nop
 ;
 ;  Interrupt RST 38
-        jp      USER_CODE + H'38
+        jp      USER_CODE + 038h
         nop
         nop
         nop
@@ -194,7 +205,7 @@ R0:     di
 ;  or enter the monitor directly.  This will depend on whether or not
 ;  the user wishes to use NMI in the application, or to use it with
 ;  a push button to break into running code.
-        .ORG    R0+H'66
+				.fill	(066h-$),0h         ; Fill remaining bytes to NMI vector
 NMI_ENTRY:
         push    af
         ld      a,2
@@ -278,7 +289,7 @@ DUMMY_INTS:
 ;;;     ld      a,2
 ;;;     jp      INT_ENTRY
 ;
-        .equ    DUMMY_SIZE, *-DUMMY_INTS
+DUMMY_SIZE      .equ    *-DUMMY_INTS
 
 ;===========================================================================
 ;  Power on reset or trap
@@ -360,30 +371,24 @@ INIT:   ld      sp,MONSTACK
 
 ;===========================================================================
 ;
-;  Initialize S16450 UART
-;
-;  access baud generator, no parity, 1 stop bit, 8 data bits
-        ld      a,B'10000011
-        out     (S16450+LCR),a
-;
-;  fixed baud rate of 19200:  crystal is 3.686400 Mhz.
-;  Divisor is 3,686400/(16*baud)
-        ld      a,12                    ;fix at 19.2 kbaud
-        out     (S16450+RXR),a          ;lsb
-        xor     a
-        out     (S16450+RXR+1),a        ;msb=0
-;
-;  access data registers, no parity, 1 stop bits, 8 data bits
-        ld      a,B'00000011
-        out     (S16450+LCR),a
-;
-;  no loopback, OUT2 on, OUT1 on, RTS on, DTR (LED) on
-        ld      a,B'00001111
-        out     (S16450+MCR),a
-;
-;  disable all interrupts: modem, receive error, transmit, and receive
-        ld      a,B'00000000
-        out     (S16450+IER),a
+				sub		a
+				out		(DRAM_CR),a			; Select DRAM page 0
+				ld		a,03fh				; Interrupts are disabled...
+				out		(D_PORT0),a			; ...so set all LED's off to protect the driver circuits...
+				out		(D_PORT1),a
+				out		(D_PORT2),a
+				out		(D_PORT3),a
+				ld		a,0ffh
+				out		(CON_REG),a			; Shut the beeper off...
+				ld		a,03h				; ACIA master reset
+				out		(COM0_CR),a			; Initialise both serial ports
+				out		(COM1_CR),a
+				ld		a,055h				; Crystal frequency = 2.4576 MHz
+											; 74HCT4060 divides by 16 => 153,600 Hz clock signal
+											; 6850 UART Control Register = 055h
+				out		(COM0_CR),a			;       Bit 0 & 1:	 Divide by 16 => 9,600 Hz Baud
+				out		(COM1_CR),a			;       Bit 2,3,& 4:	 8 Bits + 1 Stop bit
+										;       Bit 5 & 6:	 RTS = low, Transmitting Interrupt Enabled											;       Bit 7:		 Receive interrupt disabled
 ;
 ;===========================================================================
 ;  Initialize user interrupt vectors to point to monitor
@@ -433,54 +438,56 @@ INIT:   ld      sp,MONSTACK
 ;
 ;  Uses 6 bytes of stack including return address
 ;
-GETCHAR:
-        push    bc
-        push    de
-
-        ld      de,H'08000              ;long timeout
-        ld      bc,SERIAL_STATUS        ;status reg. for loop
-gc10:   dec     de
-        ld      a,d
-        or      e
-        jr      z,gc90                  ;exit if timeout
-        in      a,(c)                   ;read device status
-        bit     RXRDY,A
-        jr      z,gc10                  ;not ready yet.
+GETCHAR:		push	bc
+				push	de
 ;
-;  Data received:  return CY=0. data in A
-        xor     a                       ;cy=0
-        ld      bc,SERIAL_DATA
-        in      a,(c)                   ;read data
-
-        pop     de
-        pop     bc
-        ret
+				ld		de,08000h			; Long timeout
+				ld		a,COM0_CR			; Get selected 6850 Control reg for loop
+				ld		c,a					; Control reg in C
+gc10:	        dec		de
+				ld		a,d
+				or		e
+				jr		z,gc90				; Exit if timeout
+				in		a,(c)				; Read device status
+				bit		RXRDY,a				; Bit 0
+				jr		z,gc10				; Not ready yet.
 ;
-;  Timeout:  return CY=1
-gc90:   scf                             ;cy=1
-        pop     de
-        pop     bc
-        ret
+;  Data received:  return CY=0. Data in A
+				xor		a					; CY=0
+				inc		c					; Selected 6850 Data reg in C
+				in		a,(c)				; Read data
+				pop		de
+				pop		bc
+				ret
+;
+;  Timeout:	 return CY=1
+gc90:	        scf							; CY=1
+				pop		de
+				pop		bc
+				ret
 ;
 ;===========================================================================
 ;  Output character in A
 ;
 ;  Uses 6 bytes of stack including return address
 ;
-PUTCHAR:
-        push    bc                      ;save:  used for I/O address
-        push    af                      ;save byte to output
-        ld      bc,SERIAL_STATUS        ;status reg. for loop
-pc10:   in      a,(c)                   ;read device status
-        bit     TXRDY,a                 ;rx ready ?
-        jr      z,pc10
-
-        pop     af
-        ld      bc,SERIAL_DATA
-        out     (c),a                   ;transmit char
-
-        pop     bc
-        ret
+PUTCHAR:		push    bc					; Save:	 used for I/O address
+				push	af					; Save byte to output
+				ld		a,0ffh				; Bit of a pause
+pc02:	        dec		a
+				jr		nz,pc02
+				ld		a,COM0_CR			; Get selected 6850 Control reg
+				ld		c,a					; Selected ACIA Control reg in C
+pc10:	        in		a,(c)				; Read device status
+				bit		TXRDY,a				; Tx ready ?
+				jr		nz,pc10
+;
+				inc		c					; Selected 6850 Data reg in C
+				pop		af
+				out		(c),a				; Transmit char
+;
+				pop		bc
+				ret
 ;
 ;===========================================================================
 ;  Response string for GET TARGET STATUS request
@@ -491,26 +498,26 @@ TSTG:   .DB     0                       ;2: PROCESSOR TYPE = Z80
         .DW     0                       ;5,6: BOTTOM OF PAGED MEM (none)
         .DW     0                       ;7,8: TOP OF PAGED MEM (none)
         .DB     B1-B0                   ;9 BREAKPOINT INSTRUCTION LENGTH
-B0:     RST     H'08                    ;10+ BREKAPOINT INSTRUCTION
+B0:     RST     08h                    ;10+ BREKAPOINT INSTRUCTION
 B1:     .DB     "NoICE Z80 monitor V3.0",0 ;DESCRIPTION, ZERO
-        .equ    TSTG_SIZE, *-TSTG          ;SIZE OF STRING
+TSTG_SIZE		.equ	$-TSTG				; Size of NULL terminated string
 ;
 ;===========================================================================
 ;  HARDWARE PLATFORM INDEPENDENT EQUATES AND CODE
 ;
 ;  Communications function codes.
-        .equ    FN_GET_STATUS, H'0FF    ;reply with device info
-        .equ    FN_READ_MEM,   H'0FE    ;reply with data
-        .equ    FN_WRITE_MEM,  H'0FD    ;reply with status (+/-)
-        .equ    FN_RD_REGS,    H'0FC    ;reply with registers
-        .equ    FN_WR_REGS,    H'0FB    ;reply with status
-        .equ    FN_RUN_TARGET, H'0FA    ;reply (delayed) with registers
-        .equ    FN_SET_BYTES,  H'0F9    ;reply with data (truncate if error)
-        .equ    FN_IN,         H'0F8    ;input from port
-        .equ    FN_OUT,        H'0F7    ;output to port
+FN_GET_STATUS	.equ	0ffh				; Reply with device info
+FN_READ_MEM		.equ	0feh				; Reply with data
+FN_WRITE_MEM	.equ	0fdh				; Reply with status (+/-)
+FN_RD_REGS		.equ	0fch				; Reply with registers
+FN_WR_REGS		.equ	0fbh				; Reply with status
+FN_RUN_TARGET	.equ	0fah				; Reply (delayed) with registers
+FN_SET_BYTES	.equ	0f9h				; Reply with data (truncate if error)
+FN_IN			.equ	0f8h				; Input from port
+FN_OUT			.equ	0f7h				; Output to port
 ;
-        .equ    FN_MIN,        H'0F0    ;MINIMUM RECOGNIZED FUNCTION CODE
-        .equ    FN_ERROR,      H'0F0    ;error reply to unknown op-code
+FN_MIN			.equ	0f0h				; Minimum recognized function code
+FN_ERROR		.equ	0f0h				; Error reply to unknown op-code
 ;
 ;===========================================================================
 ;  Enter here via RST nn for breakpoint:  AF, PC are stacked.
@@ -1008,6 +1015,6 @@ CHK10:  ADD     A,(HL)
 ;===========================================================================
 ;  Hardware initialization table
 INIOUT:
-        .equ    OUTCNT, (*-INIOUT)/2    ; NUMBER OF INITIALIZING PAIRS
+OUTCNT          .equ    (*-INIOUT)/2		; Number of initializing pairs
 
         .END    RESET
