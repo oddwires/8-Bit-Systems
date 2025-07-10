@@ -15,7 +15,7 @@ This folder demonstrates the customisation of the NoICE agent and starts with th
 as obtained from the NoICE download page.
 
 Then [Minimum changes](https://github.com/oddwires/8-Bit-Systems/commit/961c3db7079678fbee4d80518fa17ca49584dca4)
-are applied to create a monitor agent compatable with my Z80 hardware and the Telemark assembler.
+are applied to create a working monitor agent compatable with my Z80 hardware and the Telemark assembler.
 
 Finaly [Cosmetic changes](https://github.com/oddwires/8-Bit-Systems/commit/a3de44857b3467403254bd7cdfddcb15b4b24da8)
  were applied to clean up the resulting code. *</p>
