@@ -3,7 +3,7 @@
 NoICE is produced and maintained by John Hartman. Full details can be found on his web site at https://www.noicedebugger.com/index.html
 
 <h2>How it Works:</h2>
-<p>NoICE runs in two parts: a program on the host PC and a monitor program on the target microcontroller. The monitor program intercepts instructions and allows for debugging actions like stepping, breakpoint insertion and register display.
+<p>NoICE runs in two parts: a program on the host PC and a monitor program on the target microcontroller. The monitor program intercepts instructions from the host PC and allows for debugging actions like stepping, breakpoint insertion and register display.
 This monitor program requires some customisation before it can be used, in particular, the memory map of the target system needs to be defined, and customised GETCH and PUTCH
 routines need to be provided to control the ACIA hardware (RS-232).
  
