@@ -10,7 +10,7 @@ routines need to be provided to control the ACIA hardware (RS-232).
 Additionally, some format changes were required to allow the resulting monitor agent to assemble through the Telemark Assembler.</p>
 <p>
 
-This folder starts with the 
+This folder demonstrates the customisation of the NoICE agent and starts with the 
 [Default NoIce Monitor Agent](https://github.com/oddwires/8-Bit-Systems/blob/9ceb676996fe873981be03973ea686bb2531277b/Z80/NoICE/Monz80.asm)
 as obtained from the NoICE download page.
 
