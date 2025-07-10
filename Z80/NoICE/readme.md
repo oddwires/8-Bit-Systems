@@ -7,7 +7,7 @@ NoICE is produced and maintained by John Hartman. Full details can be found on h
 intercept instructions and allow for debugging actions like stepping, breakpoint insertion and register display.
 This monitor program requires some customisation before it can be used, in particular, the memory map of the target system needs to be defined, and customised GETCH and PUTCH
 routines need to be provided to control the ACIA hardware (RS-232).
-Additionally, some format changes were required to allow the reulting monitor agent to assemble through the Telemark Assembler.</p>
+Additionally, some format changes were required to allow the resulting monitor agent to assemble through the Telemark Assembler.</p>
 <p>
 
 This folder starts with the 
